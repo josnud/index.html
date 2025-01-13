@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Pagos Mensual</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .summary {
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        button {
+            margin: 5px;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .filters {
+            margin-bottom: 20px;
+        }
+        select, input {
+            padding: 5px;
+            margin: 5px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>Control de Pagos Mensual</h1>
+
+    <div class="filters">
+        <label for="fechaInicio">Fecha Inicio: </label>
+        <input type="date" id="fechaInicio">
+
+        <label for="fechaFin">Fecha Fin: </label>
+        <input type="date" id="fechaFin">
+
+        <button onclick="filtrarPorFechas()">Filtrar</button>
+    </div>
+
+    <table id="tablaPagos">
+        <thead>
+            <tr>
+                <th>Día</th>
+                <th>Fecha</th>
+                <th>Total Cobrado (€)</th>
+                <th>Total Gastos (€)</th>
+                <th>Total Desembolsos (€)</th>
+                <th>Balance (€)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Filas de la tabla generadas dinámicamente -->
+        </tbody>
+    </table>
+    <p class="summary" id="resumenMensual"></p>
+
+    <button onclick="guardarDatos()">Guardar en Local Storage</button>
+    <button onclick="exportarPDF()">Exportar a PDF</button>
+    <button onclick="exportarExcel()">Exportar a Excel</button>
+
+    <script>
+        const tablaPagos = document.getElementById("tablaPagos").querySelector("tbody");
+        const resumenMensual = document.getElementById("resumenMensual");
+        let datosMensual = JSON.parse(localStorage.getItem("controlPagosMensual")) || [];
+        const diasSemana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
+        function renderTabla(filtro = null) {
+            tablaPagos.innerHTML = "";
+            let totalCobradoMes = 0;
+            let totalBalanceMes = 0;
+
+            const datosFiltrados = filtro ? datosMensual.filter(filtro) : datosMensual;
+
+            datosFiltrados.forEach((dato, index) => {
+                const balance = dato.totalCobrado - dato.totalGastos - dato.totalDesembolsos;
+                totalCobradoMes += dato.totalCobrado;
+                totalBalanceMes += balance;
+
+                const fila = `
+                    <tr>
+                        <td>
+                            <select onchange="actualizarDato(${index}, 'dia', this.value)">
+                                ${diasSemana.map(dia => `<option value="${dia}" ${dia === dato.dia ? 'selected' : ''}>${dia}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td>
+                            <input type="date" value="${dato.fecha}" onchange="actualizarDato(${index}, 'fecha', this.value)">
+                        </td>
+                        <td contenteditable="true" oninput="actualizarDato(${index}, 'totalCobrado', this.textContent)">${dato.totalCobrado}</td>
+                        <td contenteditable="true" oninput="actualizarDato(${index}, 'totalGastos', this.textContent)">${dato.totalGastos}</td>
+                        <td contenteditable="true" oninput="actualizarDato(${index}, 'totalDesembolsos', this.textContent)">${dato.totalDesembolsos}</td>
+                        <td>${balance.toFixed(2)}</td>
+                    </tr>
+                `;
+                tablaPagos.insertAdjacentHTML("beforeend", fila);
+            });
+
+            resumenMensual.textContent = `Total Cobrado en el Mes: €${totalCobradoMes.toFixed(2)} | Balance Total: €${totalBalanceMes.toFixed(2)}`;
+        }
+
+        function actualizarDato(index, campo, valor) {
+            datosMensual[index][campo] = campo === 'fecha' ? valor : isNaN(valor) ? valor : parseFloat(valor) || 0;
+            guardarDatos(false);
+            renderTabla();
+        }
+
+        function agregarFila() {
+            datosMensual.push({
+                dia: diasSemana[0],
+                fecha: new Date().toISOString().split('T')[0],
+                totalCobrado: 0,
+                totalGastos: 0,
+                totalDesembolsos: 0
+            });
+            renderTabla();
+        }
+
+        function guardarDatos(mostrarAlerta = true) {
+            localStorage.setItem("controlPagosMensual", JSON.stringify(datosMensual));
+            if (mostrarAlerta) alert("Datos guardados en Local Storage.");
+        }
+
+        function filtrarPorFechas() {
+            const fechaInicio = document.getElementById("fechaInicio").value;
+            const fechaFin = document.getElementById("fechaFin").value;
+
+            if (!fechaInicio || !fechaFin) {
+                alert("Por favor selecciona un rango de fechas válido.");
+                return;
+            }
+
+            const filtro = dato => {
+                const fecha = new Date(dato.fecha);
+                return fecha >= new Date(fechaInicio) && fecha <= new Date(fechaFin);
+            };
+
+            renderTabla(filtro);
+        }
+
+        function exportarPDF() {
+            const tabla = document.getElementById("tablaPagos");
+            const ventana = window.open("", "", "width=800,height=600");
+            ventana.document.write(tabla.outerHTML);
+            ventana.document.close();
+            ventana.print();
+        }
+
+        function exportarExcel() {
+            const tabla = document.getElementById("tablaPagos");
+            let csvContent = "data:text/csv;charset=utf-8,";
+            const filas = tabla.querySelectorAll("tr");
+
+            filas.forEach(fila => {
+                const columnas = fila.querySelectorAll("th, td");
+                const filaCSV = Array.from(columnas).map(columna => columna.textContent).join(",");
+                csvContent += filaCSV + "\n";
+            });
+
+            const enlace = document.createElement("a");
+            enlace.setAttribute("href", encodeURI(csvContent));
+            enlace.setAttribute("download", "control_pagos_mensual.csv");
+            enlace.click();
+        }
+
+        // Inicializa la tabla
+        renderTabla();
+    </script>
+
+    <button onclick="agregarFila()">Agregar Nueva Fila</button>
+</body>
+</html>
+
